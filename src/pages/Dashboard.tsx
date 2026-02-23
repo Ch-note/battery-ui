@@ -1,30 +1,62 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Camera, AlertCircle, HelpCircle, CheckCircle } from "lucide-react";
+import { apiFetch } from "../config/api";
+
+// 심판의 엄격한 타입 정의
+interface StatsData {
+  abnormal_count: number;
+  normal_count: number;
+}
 
 const Dashboard = () => {
+  // 초기 상태는 0으로 설정하거나 로딩 상태를 고려해야 한다.
+  const [stats, setStats] = useState<StatsData>({
+    abnormal_count: 0,
+    normal_count: 0,
+  });
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const data = await apiFetch<StatsData>("/analysis/stats/1/1");
+        setStats(data);
+      } catch (error) {
+        console.error("비판적 오류 발생:", error);
+        // 오류 발생 시에도 시스템은 멈추지 말아야 한다.
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+    // 30초마다 데이터를 갱신하는 엄격함을 유지하라.
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading)
+    return (
+      <div className="text-white p-10 font-mono">
+        데이터 동기화 중... 대기하라.
+      </div>
+    );
+
   return (
-    <div className="space-y-8 w-full h-full flex flex-col">
-      {/* 상단 통계 카드 */}
-      <div className="grid grid-cols-3 gap-8">
+    <div className="space-y-8 w-full h-full flex flex-col p-6 bg-[#0f172a]">
+      {/* 상단 통계 카드 - 데이터 바인딩 완료 */}
+      <div className="grid grid-cols-2 gap-8">
         <StatusCard
           label="DEFECT"
-          count={23}
+          count={stats.abnormal_count}
           color="text-red-500"
           bgColor="bg-red-500/10"
           borderColor="border-red-500/30"
           icon={AlertCircle}
         />
         <StatusCard
-          label="UNCERTAIN"
-          count={8}
-          color="text-yellow-500"
-          bgColor="bg-yellow-500/10"
-          borderColor="border-yellow-500/30"
-          icon={HelpCircle}
-        />
-        <StatusCard
           label="NORMAL"
-          count={145}
+          count={stats.normal_count}
           color="text-blue-500"
           bgColor="bg-blue-500/10"
           borderColor="border-blue-500/30"
@@ -114,6 +146,16 @@ const Dashboard = () => {
   );
 };
 
+// StatusCard 타입 정의 - 'any'는 수용할 수 없다.
+interface StatusCardProps {
+  label: string;
+  count: number;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  icon: React.ElementType;
+}
+
 const StatusCard = ({
   label,
   count,
@@ -121,7 +163,7 @@ const StatusCard = ({
   bgColor,
   borderColor,
   icon: Icon,
-}: any) => (
+}: StatusCardProps) => (
   <div
     className={`p-8 rounded-xl border ${borderColor} ${bgColor} flex items-center justify-between transition-transform hover:scale-[1.02]`}
   >
@@ -129,7 +171,7 @@ const StatusCard = ({
       <p className="text-sm text-gray-400 font-bold mb-2 tracking-wider">
         {label}
       </p>
-      <p className={`text-5xl font-black ${color}`}>{count}</p>
+      <p className={`text-5xl font-black ${color}`}>{count.toLocaleString()}</p>
     </div>
     <div className={`p-4 rounded-full ${color.replace("text-", "bg-")}/20`}>
       <Icon size={48} className={color} />

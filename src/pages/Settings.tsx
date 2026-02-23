@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   FolderOpen,
   Cpu,
@@ -7,8 +7,44 @@ import {
   Activity,
   CheckCircle2,
 } from "lucide-react";
+import { apiFetch } from "../config/api";
+
+interface ModelInfo {
+  model_name: string;
+  model_version: number;
+  accuracy: number | null;
+  is_active: boolean;
+}
 
 const Settings = () => {
+  const [modelInfo, setModelInfo] = useState<{
+    version: string;
+    accuracy: string;
+  }>({
+    version: "V.1.4.2 (PROD)",
+    accuracy: "99.8%",
+  });
+
+  useEffect(() => {
+    const fetchModelInfo = async () => {
+      try {
+        const data = await apiFetch<ModelInfo[]>(
+          "/model/battery_defect_classifier/1?only_active=true&limit=1"
+        );
+        if (data && data.length > 0) {
+          const model = data[0];
+          setModelInfo({
+            version: `V.${model.model_version} ${model.is_active ? "(PROD)" : "(INACTIVE)"}`,
+            accuracy: model.accuracy !== null ? `${model.accuracy}%` : "N/A",
+          });
+        }
+      } catch (error) {
+        console.error("모델 정보 조회 실패, 기본값 유지:", error);
+      }
+    };
+    fetchModelInfo();
+  }, []);
+
   return (
     <div className="w-full space-y-8">
       <div className="flex items-center justify-between mb-8">
@@ -74,7 +110,7 @@ const Settings = () => {
               <span>Active Model</span>
             </div>
             <p className="font-black text-2xl text-white font-mono mt-2">
-              V.1.4.2 (PROD)
+              {modelInfo.version}
             </p>
           </div>
 
@@ -84,7 +120,7 @@ const Settings = () => {
               <span>Accuracy</span>
             </div>
             <p className="font-black text-2xl text-emerald-400 font-mono mt-2">
-              99.8%
+              {modelInfo.accuracy}
             </p>
           </div>
 
