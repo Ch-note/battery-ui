@@ -8,19 +8,14 @@ import {
   Settings,
 } from "lucide-react";
 import { apiFetch } from "../config/api";
+import { CameraProvider, useCamera, Camera } from "../context/CameraContext";
 
-interface Camera {
-  camera_id: number;
-  factory_id: number;
-  camera_name: string;
-  purchased_at: string;
-}
-
-const Layout = ({ children }: { children: React.ReactNode }) => {
+// 내부에서 실제 레이아웃을 렌더링하는 컴포넌트
+const LayoutContent = ({ children }: { children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedCamera, setSelectedCamera] = useState("");
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [modelLabel, setModelLabel] = useState("v1.4.2");
+  const { selectedCamera, setSelectedCamera } = useCamera();
 
   useEffect(() => {
     const fetchInit = async () => {
@@ -31,7 +26,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         ]);
         setCameras(camData);
         if (camData.length > 0) {
-          setSelectedCamera(camData[0].camera_name);
+          // 객체 전체를 상태로 저장하는 엄격함
+          setSelectedCamera(camData[0]);
         }
         setModelLabel(`${modelData.model_name} v${modelData.model_version}`);
       } catch (error) {
@@ -39,13 +35,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       }
     };
     fetchInit();
-  }, []);
+  }, [setSelectedCamera]);
 
-  // 라우팅 제어부
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 오늘 날짜 계산 (한국 기준 YYYY-MM-DD)
   const currentDate = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -53,17 +47,21 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     timeZone: "Asia/Seoul",
   }).replace(/\. /g, "-").replace(/\./g, "");
 
-  // 메뉴 설정
   const menuItems = [
     { path: "/live", icon: LayoutDashboard, label: "실시간 검사" },
     { path: "/detail", icon: Search, label: "검사결과 상세" },
     { path: "/history", icon: HistoryIcon, label: "검증이력" },
-    { path: "/settings", icon: Settings, label: "환경설정" },
   ];
+
+  const handleCameraChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const foundCamera = cameras.find(cam => cam.camera_name === e.target.value);
+    if (foundCamera) {
+      setSelectedCamera(foundCamera);
+    }
+  };
 
   return (
     <div className="flex h-screen w-full bg-[#0f172a] text-white font-sans overflow-hidden">
-      {/* Sidebar */}
       <aside
         className={`${isOpen ? "w-72" : "w-[76px]"} bg-[#1e293b] transition-all duration-300 border-r border-gray-700 flex flex-col z-20 shrink-0`}
       >
@@ -97,7 +95,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Header */}
         <header className="h-20 bg-[#1e293b] border-b border-gray-700 flex items-center justify-between px-8 shadow-md z-10 shrink-0">
           <div className="flex items-center gap-6">
             <h1 className="text-2xl font-black tracking-wider text-white">
@@ -105,16 +102,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </h1>
           </div>
 
-          {/* 공정 정보 표시 영역 */}
           <div className="flex items-center gap-8 font-mono">
-            {/* 카메라 선택 Select Box */}
             <div className="flex flex-col items-end">
               <span className="text-gray-400 text-xs uppercase mb-1">
                 Camera
               </span>
               <select
-                value={selectedCamera}
-                onChange={(e) => setSelectedCamera(e.target.value)}
+                value={selectedCamera?.camera_name || ""}
+                onChange={handleCameraChange}
                 className="bg-gray-900 border border-gray-600 text-blue-400 text-base font-bold rounded px-2 py-0.5 outline-none focus:border-blue-500 hover:bg-gray-800 transition-colors cursor-pointer appearance-none text-center"
                 style={{ textAlignLast: "center" }}
               >
@@ -150,10 +145,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-auto p-8 bg-[#0f172a]">{children}</div>
       </main>
     </div>
+  );
+};
+
+// 최상위 Layout 래퍼 - Context Provider 제공
+const Layout = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <CameraProvider>
+      <LayoutContent>{children}</LayoutContent>
+    </CameraProvider>
   );
 };
 

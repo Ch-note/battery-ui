@@ -9,7 +9,7 @@ interface StatsData {
 
 interface DefectItem {
   cell_id: string;
-  label: number; // 1: DEFECT, 0: NORMAL
+  label: number;
   decision: string | null;
   created_at: string;
   camera_id: number;
@@ -27,7 +27,6 @@ interface Camera {
   camera_name: string;
 }
 
-// 한국 시간 기준 YYYY-MM-DD 반환
 const toKSTDateString = (date: Date): string => {
   return date.toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -45,21 +44,33 @@ const History = () => {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [historyData, setHistoryData] = useState<DefectItem[]>([]);
   const [cameras, setCameras] = useState<Record<number, string>>({});
+
+  // 상태가 존재하지 않던 결함을 바로잡은 영역
+  const [startDate, setStartDate] = useState(threeDaysAgoKST);
+  const [endDate, setEndDate] = useState(todayKST);
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const itemsPerPage = 10;
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // 날짜 파라미터를 URL에 주입
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append("start_date", startDate);
+        if (endDate) queryParams.append("end_date", endDate);
+        const qString = queryParams.toString();
+
+        // API 호출 시 쿼리 스트링 병합
         const [statsData, listData, cameraData] = await Promise.all([
-          apiFetch<StatsData>("/analysis/stats/1/1"),
-          apiFetch<ListResponse>("/analysis/list/1/1"),
+          apiFetch<StatsData>(`/analysis/stats/1/1?${qString}`),
+          apiFetch<ListResponse>(`/analysis/list/1/1?${qString}`),
           apiFetch<Camera[]>("/factory/1/cameras"),
         ]);
 
         setStats(statsData);
         setHistoryData(listData.items);
 
-        // 카메라 ID -> 이름 매핑 생성
         const camMap: Record<number, string> = {};
         cameraData.forEach(cam => {
           camMap[cam.camera_id] = cam.camera_name;
@@ -69,8 +80,45 @@ const History = () => {
         console.error("데이터 조회 실패:", error);
       }
     };
+
     fetchData();
-  }, []);
+  }, [startDate, endDate]);
+
+  // CSV 다운로드를 수행하는 날카롭고 빈틈없는 함수
+  const handleDownloadCsv = async () => {
+    if (startDate > endDate) {
+      alert("시작일이 종료일보다 늦을 수 없다. 논리적으로 생각하라.");
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // JSON 기반 apiFetch 대신 Blob 처리를 위한 순수 fetch 사용 (백엔드 포트 8000 가정)
+      const response = await fetch(`http://localhost:8000/export/csv/1/1?start_date=${startDate}&end_date=${endDate}`);
+
+      if (!response.ok) {
+        throw new Error("서버에서 CSV 데이터를 생성하지 못했다.");
+      }
+
+      // Blob 데이터를 생성하여 가상 링크로 다운로드 트리거
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `inspection_${startDate}_to_${endDate}.csv`);
+      document.body.appendChild(link);
+      link.click();
+
+      // 흔적 지우기
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("CSV 다운로드 실패:", error);
+      alert("다운로드 중 치명적 오류가 발생했다.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const totalPages = Math.ceil(historyData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -92,7 +140,8 @@ const History = () => {
             </span>
             <input
               type="date"
-              defaultValue={threeDaysAgoKST}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
               className="bg-transparent text-sm text-white outline-none font-mono"
             />
           </div>
@@ -103,7 +152,8 @@ const History = () => {
             </span>
             <input
               type="date"
-              defaultValue={todayKST}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
               className="bg-transparent text-sm text-white outline-none font-mono"
             />
           </div>
@@ -120,10 +170,18 @@ const History = () => {
           )}
         </div>
 
-        <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded text-sm font-bold flex items-center gap-2 transition-colors shadow-lg shadow-emerald-900/20">
-          <Download size={16} /> CSV DOWNLOAD
+        {/* 이벤트 핸들러가 연결된 다운로드 버튼 */}
+        <button
+          onClick={handleDownloadCsv}
+          disabled={isDownloading}
+          className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-600 text-white px-5 py-2.5 rounded text-sm font-bold flex items-center gap-2 transition-colors shadow-lg shadow-emerald-900/20"
+        >
+          <Download size={16} />
+          {isDownloading ? "DOWNLOADING..." : "CSV DOWNLOAD"}
         </button>
       </div>
+
+      {/* --- 이하 테이블 렌더링 영역은 기존과 동일하오 --- */}
       <div className="bg-[#1e293b] rounded-xl border border-gray-700 shadow-xl overflow-hidden flex-1 flex flex-col">
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm text-left">
@@ -153,7 +211,6 @@ const History = () => {
                     {new Date(item.created_at).toLocaleString("ko-KR")}
                   </td>
                   <td className="p-5 text-gray-500 font-mono">
-                    {/* Photo ID는 기획에 따라 비워둠 */}
                     -
                   </td>
                   <td className="p-5">
