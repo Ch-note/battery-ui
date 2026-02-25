@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Download, ChevronLeft, ChevronRight, Filter } from "lucide-react";
-import { apiFetch } from "../config/api";
+import { apiFetch, API_BASE_URL } from "../config/api";
 
 interface StatsData {
   abnormal_count: number;
@@ -99,9 +99,9 @@ const History = () => {
 
     setIsDownloading(true);
     try {
-      // JSON 기반 apiFetch 대신 Blob 처리를 위한 순수 fetch 사용 (백엔드 포트 8000 가정)
+      // JSON 기반 apiFetch 대신 Blob 처리를 위한 순수 fetch 사용
       const response = await fetch(
-        `http://localhost:8000/export/csv/1/1?start_date=${startDate}&end_date=${endDate}`,
+        `${API_BASE_URL}/export/csv/1/1?start_date=${startDate}&end_date=${endDate}`,
       );
 
       if (!response.ok) {
