@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Camera, AlertCircle, HelpCircle, CheckCircle } from "lucide-react";
-import { apiFetch } from "../config/api";
+import { apiFetch, API_BASE_URL } from "../config/api";
 import { useCamera } from "../context/CameraContext";
 
 interface StatsData {
@@ -139,7 +139,7 @@ const Dashboard = () => {
           <div className="flex-1 bg-black rounded-lg border border-gray-800 flex items-center justify-center relative overflow-hidden group">
             {detailData?.cell_id && !imageError ? (
               <img
-                src={`/img/original/${detailData.cell_id}.png`}
+                src={`${API_BASE_URL}/images/${detailData.cell_id}/original`}
                 alt={`Original capture for ${detailData.cell_id}`}
                 className="w-full h-full object-contain relative z-10"
                 onError={() => {

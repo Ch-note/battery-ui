@@ -6,7 +6,7 @@ import {
   UserCheck,
   CheckCircle2,
 } from "lucide-react";
-import { apiFetch } from "../config/api";
+import { apiFetch, API_BASE_URL } from "../config/api";
 
 interface StatsData {
   abnormal_count: number;
@@ -164,7 +164,7 @@ const Detail = () => {
           <div className="flex-1 bg-black rounded-xl border border-gray-800 flex items-center justify-center relative overflow-hidden group">
             {selectedId && !imageError ? (
               <img
-                src={`/img/heatmap/${selectedId}.png`}
+                src={`${API_BASE_URL}/images/${selectedId}/heatmap`}
                 alt={`Heatmap analysis for ${selectedId}`}
                 className="w-full h-full object-contain relative z-10"
                 onError={() => {
