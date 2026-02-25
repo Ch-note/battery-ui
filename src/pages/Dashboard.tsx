@@ -3,16 +3,39 @@ import { Camera, AlertCircle, HelpCircle, CheckCircle } from "lucide-react";
 import { apiFetch } from "../config/api";
 import { useCamera } from "../context/CameraContext";
 
-// API 응답 규격의 기강을 잡는 인터페이스
 interface StatsData {
   abnormal_count: number;
   normal_count: number;
+}
+
+interface DefectItem {
+  cell_id: string;
+  vision_model_label: number | boolean | string;
+  vision_model_decision: string | null;
+  llm_model_name: string | null;
+  llm_analysis_text: Record<string, string> | null;
+  created_at: string;
+  standard_id: number | null;
+  standard_name: string | null;
+  regulatory_id: number | null;
+  regulatory_name: string | null;
+  started_at: string | null;
+  camera_id: number | null;
+  camera_name: string | null;
+}
+
+interface ListResponse {
+  total: number;
+  page: number;
+  size: number;
+  items: DefectItem[];
 }
 
 interface DetailData {
   cell_id: string;
   vision_model_confidence: number;
   vision_model_decision: string;
+  vision_raw_result: object;
 }
 
 const Dashboard = () => {
@@ -23,9 +46,13 @@ const Dashboard = () => {
     normal_count: 0,
   });
 
-  // 상세 데이터를 담을 새로운 상태
   const [detailData, setDetailData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [imageError, setImageError] = useState<boolean>(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [detailData?.cell_id]);
 
   useEffect(() => {
     if (!selectedCamera) return;
@@ -34,19 +61,29 @@ const Dashboard = () => {
 
     const fetchAllData = async () => {
       try {
-        // 1. 통계 데이터 호출 (동적 camera_id 적용)
-        const statsPromise = apiFetch<StatsData>(`/analysis/stats/1/${selectedCamera.camera_id}`);
-
-        // 2. 상세 데이터 호출 (당신이 지시한 고정된 cell_id "B12345" 적용 - 매우 비판받아야 할 부분)
-        const detailPromise = apiFetch<DetailData>(`/analysis/detail/B12345`);
-
-        // 두 API를 동시에 호출하여 지연을 최소화하는 철저함
-        const [statsResult, detailResult] = await Promise.all([statsPromise, detailPromise]);
+        const [statsResult, listResult] = await Promise.all([
+          apiFetch<StatsData>(`/analysis/stats/1/${selectedCamera.camera_id}`),
+          apiFetch<ListResponse>(
+            `/analysis/list/1/${selectedCamera.camera_id}`,
+          ),
+        ]);
 
         setStats(statsResult);
-        setDetailData(detailResult);
+
+        if (listResult && listResult.items && listResult.items.length > 0) {
+          const latestCellId = listResult.items[0].cell_id;
+          const detailResult = await apiFetch<DetailData>(
+            `/analysis/detail/${latestCellId}`,
+          );
+          setDetailData(detailResult);
+        } else {
+          console.warn(
+            `[판독 경고] 카메라 ID ${selectedCamera.camera_id}에 해당하는 데이터가 없습니다.`,
+          );
+          setDetailData(null);
+        }
       } catch (error) {
-        console.error("비판적 오류 발생: 데이터 동기화 실패", error);
+        console.error("[오류] 데이터 동기화 실패:", error);
       } finally {
         setLoading(false);
       }
@@ -54,17 +91,13 @@ const Dashboard = () => {
 
     fetchAllData();
 
-    // 30초마다 갱신 (하지만 B12345만 영원히 갱신될 것이오)
+    // 30초마다 갱신
     const interval = setInterval(fetchAllData, 30000);
     return () => clearInterval(interval);
   }, [selectedCamera]);
 
   if (loading || !selectedCamera)
-    return (
-      <div className="text-white p-10 font-mono">
-        데이터 동기화 중... 대기하라.
-      </div>
-    );
+    return <div className="text-white p-10 font-mono">데이터 동기화 중...</div>;
 
   return (
     <div className="space-y-8 w-full h-full flex flex-col p-6 bg-[#0f172a]">
@@ -101,11 +134,41 @@ const Dashboard = () => {
               {selectedCamera.camera_name}
             </span>
           </div>
-          <div className="flex-1 bg-black rounded-lg border border-gray-800 flex items-center justify-center relative overflow-hidden">
-            <Camera size={80} className="text-gray-700 opacity-50" />
-            <span className="absolute mt-32 text-gray-600 text-sm font-mono tracking-widest">
-              LIVE STREAM PLACEHOLDER
-            </span>
+
+          {/* 변경된 원본 이미지 렌더링 영역 */}
+          <div className="flex-1 bg-black rounded-lg border border-gray-800 flex items-center justify-center relative overflow-hidden group">
+            {detailData?.cell_id && !imageError ? (
+              <img
+                src={`/img/original/${detailData.cell_id}.png`}
+                alt={`Original capture for ${detailData.cell_id}`}
+                className="w-full h-full object-contain relative z-10"
+                onError={() => {
+                  console.error(
+                    `[판독 오류] ${detailData.cell_id}.png 원본 이미지를 찾을 수 없다.`,
+                  );
+                  setImageError(true);
+                }}
+              />
+            ) : (
+              <>
+                <Camera
+                  size={80}
+                  className={`text-gray-700 opacity-50 ${imageError ? "text-red-900" : ""}`}
+                />
+                <span className="absolute mt-32 text-gray-600 text-sm font-mono tracking-widest flex flex-col items-center">
+                  <span>
+                    {imageError
+                      ? "ORIGINAL IMAGE NOT FOUND"
+                      : "LIVE STREAM PLACEHOLDER"}
+                  </span>
+                  {imageError && (
+                    <span className="text-red-800 mt-2 text-xs border border-red-900/50 bg-red-900/20 px-2 py-1 rounded">
+                      ID: {detailData?.cell_id || "UNKNOWN"}
+                    </span>
+                  )}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -116,27 +179,53 @@ const Dashboard = () => {
               Detected Product Analysis
             </span>
             <span className="text-sm font-mono text-red-400 border border-red-900/50 bg-red-900/20 px-3 py-1.5 rounded font-bold">
-              {detailData?.vision_model_decision === "정상" ? "Normal" : "Defect Found"}
+              {detailData?.vision_model_decision === "정상"
+                ? "Normal"
+                : "Defect Found"}
             </span>
           </div>
 
-          <div className="flex-1 bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg border border-gray-700 mb-6 flex items-center justify-center relative">
-            <div className="w-80 h-32 border-4 border-gray-500 rounded-xl relative flex items-center bg-gray-700/50 shadow-inner">
-              <div className="absolute -right-6 w-5 h-16 bg-gray-500 rounded-r-md"></div>
-              <div className="h-full w-[80%] bg-gradient-to-r from-green-500/20 to-transparent absolute left-0"></div>
+          <div className="flex-1 bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg border border-gray-700 mb-6 flex flex-col items-center justify-center relative p-4 overflow-auto">
+            {detailData?.vision_raw_result ? (
+              <div className="text-xs font-mono text-green-300 w-full">
+                <p className="mb-2 text-yellow-500 font-bold">
+                  RAW ANALYSIS RESULT:
+                </p>
+                <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-black/30 rounded-lg border border-gray-800 font-mono text-xs">
+                  {/* Anomaly Score 구역 */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-gray-500 font-bold uppercase tracking-tighter">
+                      Anomaly Score
+                    </span>
+                    <span className="text-yellow-500 text-lg font-black">
+                      {(
+                        detailData?.vision_raw_result as any
+                      )?.anomaly_score?.toFixed(4) || "0.0000"}
+                    </span>
+                  </div>
 
-              <div className="absolute top-6 left-40 w-10 h-10 rounded-full border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-ping opacity-75"></div>
-              <div className="absolute top-6 left-40 w-10 h-10 rounded-full border-2 border-red-500"></div>
-            </div>
+                  {/* Defect Type 구역 */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-gray-500 font-bold uppercase tracking-tighter">
+                      Defect Type
+                    </span>
+                    <span className="text-red-400 text-lg font-black">
+                      {(detailData?.vision_raw_result as any)?.defect_type ||
+                        "Unknown"}
+                    </span>
+                  </div>
+                </div>
 
-            <div className="absolute top-1/4 left-1/2 bg-white text-black text-xs font-black px-3 py-1.5 rounded shadow-lg -translate-y-8">
-              {detailData?.vision_model_decision || "N/A"}: {detailData?.vision_model_confidence ? `${detailData.vision_model_confidence}%` : "0%"}
-              <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45"></div>
-            </div>
+                <pre className="mt-4 p-2 bg-black/40 rounded border border-gray-800">
+                  {JSON.stringify(detailData.vision_raw_result, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <span className="text-gray-600">NO RAW DATA</span>
+            )}
           </div>
 
-          {/* 지시받은 3가지 데이터로 재구성된 하단 정보 그리드 */}
-          <div className="grid grid-cols-3 gap-5 text-sm">
+          <div className="grid grid-cols-2 gap-5 text-sm">
             <div className="p-4 bg-black/20 rounded border border-gray-700/50">
               <p className="text-gray-500 mb-2 font-bold text-xs uppercase">
                 Cell ID
@@ -150,18 +239,11 @@ const Dashboard = () => {
                 Confidence
               </p>
               <p className="font-bold text-green-400 font-mono text-base">
-                {detailData?.vision_model_confidence ? `${detailData.vision_model_confidence}%` : "0%"}
+                {detailData?.vision_model_confidence
+                  ? `${detailData.vision_model_confidence}`
+                  : "0"}
               </p>
             </div>
-            <div className="p-4 bg-black/20 rounded border border-gray-700/50">
-              <p className="text-gray-500 mb-2 font-bold text-xs uppercase">
-                Decision
-              </p>
-              <p className="font-bold text-white text-base truncate">
-                {detailData?.vision_model_decision || "판독 대기중"}
-              </p>
-            </div>
-            {/* Processing Time 영역은 지시대로 완벽히 제거됨 */}
           </div>
         </div>
       </div>

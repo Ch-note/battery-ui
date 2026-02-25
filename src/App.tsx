@@ -3,7 +3,6 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
 import Detail from "./pages/Detail";
-import Settings from "./pages/Settings";
 
 function App() {
   return (
@@ -16,7 +15,6 @@ function App() {
           <Route path="/live" element={<Dashboard />} />
           <Route path="/detail" element={<Detail />} />
           <Route path="/history" element={<History />} />
-          <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
     </BrowserRouter>

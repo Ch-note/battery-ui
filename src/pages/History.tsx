@@ -9,8 +9,9 @@ interface StatsData {
 
 interface DefectItem {
   cell_id: string;
-  label: number;
-  decision: string | null;
+  vision_model_label: number;
+  vision_model_decision: string | null;
+  vision_model_confidence: number;
   created_at: string;
   camera_id: number;
 }
@@ -28,16 +29,21 @@ interface Camera {
 }
 
 const toKSTDateString = (date: Date): string => {
-  return date.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "Asia/Seoul",
-  }).replace(/\. /g, "-").replace(/\./g, "");
+  return date
+    .toLocaleDateString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "Asia/Seoul",
+    })
+    .replace(/\. /g, "-")
+    .replace(/\./g, "");
 };
 
 const todayKST = toKSTDateString(new Date());
-const threeDaysAgoKST = toKSTDateString(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000));
+const threeDaysAgoKST = toKSTDateString(
+  new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+);
 
 const History = () => {
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,7 +78,7 @@ const History = () => {
         setHistoryData(listData.items);
 
         const camMap: Record<number, string> = {};
-        cameraData.forEach(cam => {
+        cameraData.forEach((cam) => {
           camMap[cam.camera_id] = cam.camera_name;
         });
         setCameras(camMap);
@@ -94,7 +100,9 @@ const History = () => {
     setIsDownloading(true);
     try {
       // JSON 기반 apiFetch 대신 Blob 처리를 위한 순수 fetch 사용 (백엔드 포트 8000 가정)
-      const response = await fetch(`http://localhost:8000/export/csv/1/1?start_date=${startDate}&end_date=${endDate}`);
+      const response = await fetch(
+        `http://localhost:8000/export/csv/1/1?start_date=${startDate}&end_date=${endDate}`,
+      );
 
       if (!response.ok) {
         throw new Error("서버에서 CSV 데이터를 생성하지 못했다.");
@@ -105,7 +113,10 @@ const History = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `inspection_${startDate}_to_${endDate}.csv`);
+      link.setAttribute(
+        "download",
+        `inspection_${startDate}_to_${endDate}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
 
@@ -190,8 +201,8 @@ const History = () => {
                 <th className="p-5 border-b border-gray-700 w-32">Camera</th>
                 <th className="p-5 border-b border-gray-700">Battery ID</th>
                 <th className="p-5 border-b border-gray-700">Date</th>
-                <th className="p-5 border-b border-gray-700">Photo ID</th>
                 <th className="p-5 border-b border-gray-700">Defect Type</th>
+                <th className="p-5 border-b border-gray-700">Confidence</th>
                 <th className="p-5 border-b border-gray-700">Status</th>
               </tr>
             </thead>
@@ -210,21 +221,21 @@ const History = () => {
                   <td className="p-5 text-gray-400 font-mono">
                     {new Date(item.created_at).toLocaleString("ko-KR")}
                   </td>
-                  <td className="p-5 text-gray-500 font-mono">
-                    -
-                  </td>
                   <td className="p-5">
-                    {item.decision ? (
+                    {item.vision_model_decision ? (
                       <span className="bg-red-900/30 text-red-400 border border-red-900/50 px-3 py-1 rounded text-xs font-bold uppercase">
-                        {item.decision}
+                        {item.vision_model_decision}
                       </span>
                     ) : (
                       <span className="text-gray-600">-</span>
                     )}
                   </td>
+                  <td className="p-5 font-bold text-green-400 font-mono text-base">
+                    {item.vision_model_confidence}
+                  </td>
                   <td className="p-5">
                     <div
-                      className={`w-3 h-3 rounded-full ${item.label === 0 ? "bg-blue-500" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"}`}
+                      className={`w-3 h-3 rounded-full ${item.vision_model_label === 0 ? "bg-blue-500" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"}`}
                     ></div>
                   </td>
                 </tr>
@@ -241,18 +252,20 @@ const History = () => {
             <ChevronLeft size={20} />
           </button>
 
-          {totalPages > 0 && Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-            <button
-              key={page}
-              onClick={() => handlePageChange(page)}
-              className={`w-8 h-8 rounded text-xs font-bold transition-colors ${currentPage === page
-                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                : "text-gray-400 hover:bg-gray-700"
+          {totalPages > 0 &&
+            Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => handlePageChange(page)}
+                className={`w-8 h-8 rounded text-xs font-bold transition-colors ${
+                  currentPage === page
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
+                    : "text-gray-400 hover:bg-gray-700"
                 }`}
-            >
-              {page}
-            </button>
-          ))}
+              >
+                {page}
+              </button>
+            ))}
 
           <button
             onClick={() => handlePageChange(currentPage + 1)}
